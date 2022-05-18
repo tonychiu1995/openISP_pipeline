@@ -16,9 +16,23 @@ from model.fcs import FCS
 from model.bcc import BCC
 from model.hsc import HSC
 from model.nlm import NLM
+import argparse
 
 raw_path = './raw/test.RAW'
 config_path = './config/config.csv'
+
+def parser_input():
+    # Parse input parameters
+    parser = argparse.ArgumentParser(description='ISP pipeline tool')
+    parser.add_argument('-f', '--file', type=str, default='/raw/test.RAW', help='Path of the raw file')
+    parser.add_argument('-m', '--model', nargs='*',
+                        help='choose ISP model')
+    # parser.add_argument('--light', type=int, help='underscore position to identify light condition and parse reports.')
+    args = parser.parse_args()
+    return parser, args
+
+
+[parser, args] = parser_input()
 
 f = open(config_path, 'r', encoding='utf-8-sig')
 with f:
@@ -186,140 +200,155 @@ with f:
             contrast = int(value) if 'contrast' in str(parameter) else contrast
             bcc_clip = int(value) if 'bcc_clip' in str(parameter) else bcc_clip
 
-rawimg = np.fromfile(raw_path, dtype='uint16', sep='')
+raw_path = args.file
+# <u2 means "little endian" "unsinged" "2-byte data which is equivalent to 16-bit"
+# >u1 means "big endian" "unsinged" "1-byte data which is equivalent to 8-bit"
+dt = '>u2'
+# dt = '<u2'
+# dt = 'uint16'
+rawimg = np.fromfile(raw_path, dtype=dt, sep='')
 rawimg = rawimg.reshape([raw_h, raw_w])
 print(50*'-' + '\nLoading RAW Image Done......')
-#plt.imshow(rawimg, cmap='gray')
-#plt.show()
+# plt.imshow(rawimg, cmap='gray')
+# plt.show()
 
-# dead pixel correction
-dpc = DPC(rawimg, dpc_thres, dpc_mode, dpc_clip)
-rawimg_dpc = dpc.execute()
-print(50*'-' + '\nDead Pixel Correction Done......')
-#plt.imshow(rawimg_dpc, cmap='gray')
-#plt.show()
 
-# black level compensation
-parameter = [bl_r, bl_gr, bl_gb, bl_b, alpha, beta]
-blc = BLC(rawimg_dpc, parameter, bayer_pattern, blc_clip)
-rawimg_blc = blc.execute()
-print(50*'-' + '\nBlack Level Compensation Done......')
-#plt.imshow(rawimg_blc, cmap='gray')
-#plt.show()
+print(args.model)
+if 'dpc' in args.model:
+    # dead pixel correction
+    dpc_thres = 2550
+    dpc_mode = 'gradient'
+    dpc_clip = 65535
+    dpc = DPC(rawimg, dpc_thres, dpc_mode, dpc_clip)
+    rawimg_dpc = dpc.execute()
+    print(50*'-' + '\nDead Pixel Correction Done......')
+    plt.imshow(rawimg_dpc, cmap='gray')
+    plt.show()
 
-# lens shading correction
+else:
+    # black level compensation
+    parameter = [bl_r, bl_gr, bl_gb, bl_b, alpha, beta]
+    blc = BLC(rawimg_dpc, parameter, bayer_pattern, blc_clip)
+    rawimg_blc = blc.execute()
+    print(50*'-' + '\nBlack Level Compensation Done......')
+    #plt.imshow(rawimg_blc, cmap='gray')
+    #plt.show()
 
-# anti-aliasing filter
-aaf = AAF(rawimg_blc)
-rawimg_aaf = aaf.execute()
-print(50*'-' + '\nAnti-aliasing Filtering Done......')
-#plt.imshow(rawimg_aaf, cmap='gray')
-#plt.show()
+    # lens shading correction
 
-#rawimg_diff = rawimg_blc - rawimg_aaf
-#plt.imshow(rawimg_diff, cmap='gray')
-#plt.show()
+    # anti-aliasing filter
+    aaf = AAF(rawimg_blc)
+    rawimg_aaf = aaf.execute()
+    print(50*'-' + '\nAnti-aliasing Filtering Done......')
+    #plt.imshow(rawimg_aaf, cmap='gray')
+    #plt.show()
 
-# white balance gain control
-parameter = [r_gain, gr_gain, gb_gain, b_gain]
-awb = WBGC(rawimg_aaf, parameter, bayer_pattern, awb_clip)
-rawimg_awb = awb.execute()
-print(50*'-' + '\nWhite Balance Gain Done......')
-#plt.imshow(rawimg_awb, cmap='gray')
-#plt.show()
+    #rawimg_diff = rawimg_blc - rawimg_aaf
+    #plt.imshow(rawimg_diff, cmap='gray')
+    #plt.show()
 
-# chroma noise filtering
-cnf = CNF(rawimg_awb, bayer_pattern, 0, parameter, 1023)
-rawimg_cnf = cnf.execute()
-print(50*'-' + '\nChroma Noise Filtering Done......')
-#plt.imshow(rawimg_cnf/4, cmap='gray')
-#plt.show()
+    # white balance gain control
+    parameter = [r_gain, gr_gain, gb_gain, b_gain]
+    awb = WBGC(rawimg_aaf, parameter, bayer_pattern, awb_clip)
+    rawimg_awb = awb.execute()
+    print(50*'-' + '\nWhite Balance Gain Done......')
+    #plt.imshow(rawimg_awb, cmap='gray')
+    #plt.show()
 
-# color filter array interpolation
-cfa = CFA(rawimg_cnf, cfa_mode, bayer_pattern, cfa_clip)
-rgbimg_cfa = cfa.execute()
-print(50*'-' + '\nDemosaicing Done......')
-#plt.imshow(rgbimg_cfa/4)
-#plt.show()
+    # chroma noise filtering
+    cnf = CNF(rawimg_awb, bayer_pattern, 0, parameter, 1023)
+    rawimg_cnf = cnf.execute()
+    print(50*'-' + '\nChroma Noise Filtering Done......')
+    #plt.imshow(rawimg_cnf/4, cmap='gray')
+    #plt.show()
 
-# color correction matrix
-ccm = CCM(rgbimg_cfa, ccm)
-rgbimg_ccm = ccm.execute()
-print(50*'-' + '\nColor Correction Done......')
-#plt.imshow(rgbimg_ccm)
-#plt.show()
+    # color filter array interpolation
+    cfa = CFA(rawimg_cnf, cfa_mode, bayer_pattern, cfa_clip)
+    rgbimg_cfa = cfa.execute()
+    print(50*'-' + '\nDemosaicing Done......')
+    #plt.imshow(rgbimg_cfa/4)
+    #plt.show()
 
-# gamma correction
-# look up table
-bw = 10
-gamma = 0.5
-mode = 'rgb'
+    # color correction matrix
+    ccm = CCM(rgbimg_cfa, ccm)
+    rgbimg_ccm = ccm.execute()
+    print(50*'-' + '\nColor Correction Done......')
+    #plt.imshow(rgbimg_ccm)
+    #plt.show()
 
-maxval = pow(2,bw)
-ind = range(0, maxval)
-val = [round(pow(float(i)/maxval, gamma) * maxval) for i in ind]
-lut = dict(zip(ind, val))
-#print(ind, val, lut)
-gc = GC(rgbimg_ccm, lut, mode)
-rgbimg_gc = gc.execute()
-print(50*'-' + '\nGamma Correction Done......')
-#plt.imshow(rgbimg_gc)
-#plt.show()
+    # gamma correction
+    # look up table
+    bw = 10
+    gamma = 0.5
+    mode = 'rgb'
 
-# color space conversion
-csc = CSC(rgbimg_ccm, csc)
-yuvimg_csc = csc.execute()
-print(50*'-' + '\nColor Space Conversion Done......')
-#plt.imshow(yuvimg_csc[:,:,0], cmap='gray')
-#plt.show()
+    maxval = pow(2,bw)
+    ind = range(0, maxval)
+    val = [round(pow(float(i)/maxval, gamma) * maxval) for i in ind]
+    lut = dict(zip(ind, val))
+    #print(ind, val, lut)
+    gc = GC(rgbimg_ccm, lut, mode)
+    rgbimg_gc = gc.execute()
+    print(50*'-' + '\nGamma Correction Done......')
+    #plt.imshow(rgbimg_gc)
+    #plt.show()
 
-# non-local means denoising
-nlm = NLM(yuvimg_csc[:,:,0], 1, 4, nlm_h, nlm_clip)
-yuvimg_nlm = nlm.execute()
-print(50*'-' + '\nNon Local Means Denoising Done......')
-#plt.imshow(yuvimg_nlm, cmap='gray')
-#plt.show()
+    # color space conversion
+    csc = CSC(rgbimg_ccm, csc)
+    yuvimg_csc = csc.execute()
+    print(50*'-' + '\nColor Space Conversion Done......')
+    #plt.imshow(yuvimg_csc[:,:,0], cmap='gray')
+    #plt.show()
 
-# bilateral filter
-bnf = BNF(yuvimg_nlm, bnf_dw, bnf_rw, bnf_rthres, bnf_clip)
-yuvimg_bnf = bnf.execute()
-print(50*'-' + '\nBilateral Filtering Done......')
-#plt.imshow(yuvimg_bnf, cmap='gray')
-#plt.show()
+    # non-local means denoising
+    nlm = NLM(yuvimg_csc[:,:,0], 1, 4, nlm_h, nlm_clip)
+    yuvimg_nlm = nlm.execute()
+    print(50*'-' + '\nNon Local Means Denoising Done......')
+    #plt.imshow(yuvimg_nlm, cmap='gray')
+    #plt.show()
 
-# edge enhancement
-ee = EE(yuvimg_bnf[:,:], edge_filter, ee_gain, ee_thres, ee_emclip)
-yuvimg_ee, yuvimg_edgemap = ee.execute()
-print(50*'-' + '\nEdge Enhancement Done......')
-#plt.imshow(yuvimg_ee)
-#plt.show()
-#plt.imshow(yuvimg_edgemap)
-#plt.show()
+    # bilateral filter
+    bnf = BNF(yuvimg_nlm, bnf_dw, bnf_rw, bnf_rthres, bnf_clip)
+    yuvimg_bnf = bnf.execute()
+    print(50*'-' + '\nBilateral Filtering Done......')
+    #plt.imshow(yuvimg_bnf, cmap='gray')
+    #plt.show()
 
-# false color suppresion
-fcs = FCS(yuvimg_csc[:,:,1:3], yuvimg_edgemap, fcs_edge, fcs_gain, fcs_intercept, fcs_slope)
-yuvimg_fcs = fcs.execute()
-print(50*'-' + '\nFalse Color Suppresion Done......')
-#plt.imshow(yuvimg_fcs)
-#plt.show()
+    # edge enhancement
+    ee = EE(yuvimg_bnf[:,:], edge_filter, ee_gain, ee_thres, ee_emclip)
+    yuvimg_ee, yuvimg_edgemap = ee.execute()
+    print(50*'-' + '\nEdge Enhancement Done......')
+    #plt.imshow(yuvimg_ee)
+    #plt.show()
+    #plt.imshow(yuvimg_edgemap)
+    #plt.show()
 
-# hue/saturation control
-hsc = HSC(yuvimg_fcs, hue, saturation, hsc_clip)
-yuvimg_hsc = hsc.execute()
-print(50*'-' + '\nHue/Saturation Adjustment Done......')
-#plt.imshow(yuvimg_hsc)
-#plt.show()
+    # false color suppresion
+    fcs = FCS(yuvimg_csc[:,:,1:3], yuvimg_edgemap, fcs_edge, fcs_gain, fcs_intercept, fcs_slope)
+    yuvimg_fcs = fcs.execute()
+    print(50*'-' + '\nFalse Color Suppresion Done......')
+    #plt.imshow(yuvimg_fcs)
+    #plt.show()
 
-# brighyness/contrast control
-contrast = contrast / pow(2,5)    #[-32,128]
-bcc = BCC(yuvimg_ee, brightness, contrast, bcc_clip)
-yuvimg_bcc = bcc.execute()
-print(50*'-' + '\nBrightness/Contrast Adjustment Done......')
-#plt.imshow(yuvimg_bcc)
-#plt.show()
+    # hue/saturation control
+    hsc = HSC(yuvimg_fcs, hue, saturation, hsc_clip)
+    yuvimg_hsc = hsc.execute()
+    print(50*'-' + '\nHue/Saturation Adjustment Done......')
+    #plt.imshow(yuvimg_hsc)
+    #plt.show()
 
-yuvimg_out = np.empty((raw_h, raw_w, 3), dtype=np.uint8)
-yuvimg_out[:,:,0] = yuvimg_bcc
-yuvimg_out[:,:,1:3] = yuvimg_hsc
-#plt.imshow(yuvimg_out)
-#plt.show()
+    # brighyness/contrast control
+    contrast = contrast / pow(2,5)    #[-32,128]
+    bcc = BCC(yuvimg_ee, brightness, contrast, bcc_clip)
+    yuvimg_bcc = bcc.execute()
+    print(50*'-' + '\nBrightness/Contrast Adjustment Done......')
+    #plt.imshow(yuvimg_bcc)
+    #plt.show()
+
+    yuvimg_out = np.empty((raw_h, raw_w, 3), dtype=np.uint8)
+    yuvimg_out[:,:,0] = yuvimg_bcc
+    yuvimg_out[:,:,1:3] = yuvimg_hsc
+    #plt.imshow(yuvimg_out)
+    #plt.show()
+
+
