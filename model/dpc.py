@@ -52,9 +52,7 @@ class DPC:
                     # print(abs(px - p0), px, p0, int(px)-int(p0))
                 # print(self.thres)
 
-                # if (abs(p1 - p0) > self.thres) and (abs(p2 - p0) > self.thres) and (abs(p3 - p0) > self.thres) \
-                #         and (abs(p4 - p0) > self.thres) and (abs(p5 - p0) > self.thres) and (abs(p6 - p0) > self.thres) \
-                #         and (abs(p7 - p0) > self.thres) and (abs(p8 - p0) > self.thres):
+                # True if p1-p7 minus p0 are ALL larger than the threshold
                 if dpc is True:
                     count += 1
                     print("[" + self.mode + "] Execute dead pixel correlation for ({y},{x}), count = {c}...".format(x=x, y=y, c=count))

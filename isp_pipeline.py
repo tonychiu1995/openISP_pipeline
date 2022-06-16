@@ -203,15 +203,15 @@ with f:
 raw_path = args.file
 # <u2 means "little endian" "unsinged" "2-byte data which is equivalent to 16-bit"
 # >u1 means "big endian" "unsinged" "1-byte data which is equivalent to 8-bit"
-dt = '>u2'
-# dt = '<u2'
+# dt = '>u2'
+dt = '<u2'
 # dt = 'uint16'
-rawimg = np.fromfile(raw_path, dtype=dt, sep='')
+rawimg = np.fromfile(raw_path, dtype=dt)
 rawimg = rawimg.reshape([raw_h, raw_w])
 print(50*'-' + '\nLoading RAW Image Done......')
-# plt.imshow(rawimg, cmap='gray')
-# plt.show()
-
+plt.imshow(rawimg, cmap='gray')
+plt.show()
+rawimg_dpc = []
 
 print(args.model)
 if 'dpc' in args.model:
@@ -225,16 +225,31 @@ if 'dpc' in args.model:
     plt.imshow(rawimg_dpc, cmap='gray')
     plt.show()
 
-else:
+if 'blc' in args.model:
     # black level compensation
+    bl_r = 0
+    bl_gr = 0
+    bl_gb = 0
+    bl_b = 0
+    alpha = 0
+    beta = 0
+    mode = 'mean'
     parameter = [bl_r, bl_gr, bl_gb, bl_b, alpha, beta]
-    blc = BLC(rawimg_dpc, parameter, bayer_pattern, blc_clip)
+    if rawimg_dpc:
+        mean_px = np.mean(rawimg_dpc)
+        blc = BLC(rawimg_dpc, parameter, bayer_pattern, blc_clip, mode)
+    else:
+        mean_px = np.mean(rawimg)
+        blc = BLC(rawimg, parameter, bayer_pattern, blc_clip, mode)
     rawimg_blc = blc.execute()
     print(50*'-' + '\nBlack Level Compensation Done......')
     #plt.imshow(rawimg_blc, cmap='gray')
     #plt.show()
+    print("Mean Pixel Level Before BLC: ", mean_px)
+    print("Mean Pixel Level After BLC: ", np.mean(rawimg_blc))
 
     # lens shading correction
+else:
 
     # anti-aliasing filter
     aaf = AAF(rawimg_blc)
